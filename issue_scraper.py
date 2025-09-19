@@ -45,6 +45,7 @@ def calculate_similarity(a, b):
 
 async def init_playwright():
     if not PLAYWRIGHT_AVAILABLE:
+        logger.warning("Playwright is not available in this environment")
         raise RuntimeError("Playwright is not available in this environment")
         
     try:
@@ -61,12 +62,32 @@ async def init_playwright():
                 '--no-zygote',
                 '--single-process',
                 '--disable-gpu'
-            ]
+            ],
+            # Add timeout for browser launch
+            timeout=60000
         )
         return playwright, browser
     except Exception as e:
-        logger.error(f"Failed to initialize Playwright: {e}")
-        raise
+        logger.warning(f"Failed to initialize Playwright: {e}")
+        # If browser launch fails, try to install the browser
+        try:
+            logger.info("Attempting to install Playwright browser...")
+            import subprocess
+            subprocess.run(["playwright", "install", "chromium"], check=True)
+            # Try launching again after installation
+            playwright = await async_playwright().start()
+            browser = await playwright.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage'
+                ]
+            )
+            return playwright, browser
+        except Exception as install_error:
+            logger.error(f"Failed to install/launch Playwright browser: {install_error}")
+            raise RuntimeError("Could not initialize Playwright browser. Falling back to requests.")
 
 async def scrape_with_playwright(company_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Scrape Issuu using Playwright."""
@@ -253,19 +274,24 @@ async def scrape_issuu_results(company_name: str) -> Tuple[List[Dict[str, Any]],
     """Main scraping function that tries different methods."""
     if not company_name.strip():
         return [], []
-        
-    # First try Playwright if available
+    
+    # Try requests first as it's more reliable in restricted environments
+    if REQUESTS_AVAILABLE:
+        try:
+            logger.info("Trying requests-based scraping first...")
+            return await scrape_with_requests(company_name)
+        except Exception as e:
+            logger.warning(f"Requests-based scraping failed: {e}")
+    
+    # Fall back to Playwright if available
     if PLAYWRIGHT_AVAILABLE:
         try:
+            logger.info("Falling back to Playwright scraping...")
             return await scrape_with_playwright(company_name)
         except Exception as e:
-            logger.warning(f"Playwright scraping failed, falling back to requests: {e}")
+            logger.error(f"Playwright scraping also failed: {e}")
     
-    # Fall back to requests if Playwright fails or isn't available
-    if REQUESTS_AVAILABLE:
-        return await scrape_with_requests(company_name)
-    
-    logger.error("No available scraping methods")
+    logger.error("All scraping methods failed")
     return [], []
 
 if __name__ == "__main__":
