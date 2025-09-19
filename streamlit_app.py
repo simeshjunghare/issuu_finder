@@ -1,4 +1,8 @@
 import streamlit as st
+
+# Set page config must be the first Streamlit command
+st.set_page_config(page_title="Issuu Scraper", page_icon="📄", layout="wide")
+
 import json
 import asyncio
 import logging
@@ -32,9 +36,6 @@ install_playwright()
 if platform.system() == "Windows":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     logger.info("Applied WindowsProactorEventLoopPolicy for asyncio compatibility")
-
-# Streamlit app configuration
-st.set_page_config(page_title="Issuu Scraper", page_icon="📄", layout="wide")
 
 # Title and description
 st.title("Issuu Publication Scraper")
