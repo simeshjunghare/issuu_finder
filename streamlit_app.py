@@ -72,16 +72,21 @@ if st.button("Scrape Issuu", key="scrape_button"):
             try:
                 # Call the async scraper function with error handling
                 try:
-                    # First try with Playwright
+                    # First try with Playwright or requests
                     try:
                         matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
                     except Exception as e:
-                        logger.warning(f"Playwright scraping failed, trying to install browser: {e}")
-                        # If Playwright fails, try to install the browser and retry once
+                        logger.warning(f"Initial scraping attempt failed: {e}")
+                        # If initial attempt fails, try to install Playwright browser
                         if install_playwright_browser():
+                            logger.info("Retrying scraping after browser installation...")
                             matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
                         else:
-                            raise Exception("Failed to install Playwright browser. Falling back to basic scraping.")
+                            raise Exception("Failed to initialize scraping. Please try again later or contact support.")
+                    
+                    if not matching_results and not non_matching_results:
+                        raise Exception("No results found. The website might have changed or the company name might not exist.")
+                            
                 except Exception as e:
                     logger.error(f"Error during scraping: {e}")
                     st.error(f"An error occurred during scraping: {str(e)}")
