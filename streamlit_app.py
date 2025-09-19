@@ -25,22 +25,23 @@ except ImportError as e:
     IMPORT_SUCCESS = False
     st.error(f"Failed to import required modules: {e}")
 
-def check_playwright_deps():
-    """Check if Playwright dependencies are available."""
+def install_playwright_browser():
+    """Install Playwright browser if not already installed."""
     try:
-        # Try to install Playwright in a way that won't break if it fails
+        logger.info("Checking Playwright browser installation...")
+        # First try to install the browser
         result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install-deps", "--dry-run", "chromium"],
+            [sys.executable, "-m", "playwright", "install", "chromium"],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
-            logger.warning("Playwright dependencies might be missing. Falling back to basic scraping.")
-            st.warning("Some advanced features might be limited. Using basic scraping mode.")
+            logger.warning(f"Failed to install Playwright browser: {result.stderr}")
             return False
+        logger.info("Successfully installed Playwright browser")
         return True
     except Exception as e:
-        logger.warning(f"Error checking Playwright dependencies: {e}")
+        logger.error(f"Error installing Playwright browser: {e}")
         return False
 
 # Set WindowsProactorEventLoopPolicy for Windows
@@ -71,7 +72,16 @@ if st.button("Scrape Issuu", key="scrape_button"):
             try:
                 # Call the async scraper function with error handling
                 try:
-                    matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
+                    # First try with Playwright
+                    try:
+                        matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
+                    except Exception as e:
+                        logger.warning(f"Playwright scraping failed, trying to install browser: {e}")
+                        # If Playwright fails, try to install the browser and retry once
+                        if install_playwright_browser():
+                            matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
+                        else:
+                            raise Exception("Failed to install Playwright browser. Falling back to basic scraping.")
                 except Exception as e:
                     logger.error(f"Error during scraping: {e}")
                     st.error(f"An error occurred during scraping: {str(e)}")
