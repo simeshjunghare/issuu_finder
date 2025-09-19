@@ -1,15 +1,12 @@
 import streamlit as st
-
-# Set page config must be the first Streamlit command
-st.set_page_config(page_title="Issuu Scraper", page_icon="📄", layout="wide")
-
 import json
 import asyncio
 import logging
 import platform
 import pandas as pd
 import subprocess
-from issue_scraper import scrape_issuu_results
+import sys
+from typing import Tuple, List, Dict, Any
 
 # Configure logging for Streamlit at the module level
 logging.basicConfig(
@@ -19,28 +16,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Ensure Chromium and dependencies are installed for Playwright ---
-@st.cache_resource
-def install_playwright():
+def check_playwright_deps():
+    """Check if Playwright dependencies are available."""
     try:
-        # Install Playwright and its dependencies
-        subprocess.run(["playwright", "install", "chromium"], check=True)
-        subprocess.run(["playwright", "install-deps", "chromium"], check=True)
-        logger.info("Successfully installed Playwright Chromium and dependencies")
-    except subprocess.CalledProcessError as e:
-        logger.warning(f"Playwright installation warning: {e}")
-        st.warning("Some Playwright dependencies might be missing. The app may not work correctly.")
+        # Try to install Playwright in a way that won't break if it fails
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install-deps", "--dry-run", "chromium"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            logger.warning("Playwright dependencies might be missing. Falling back to basic scraping.")
+            st.warning("Some advanced features might be limited. Using basic scraping mode.")
+            return False
+        return True
     except Exception as e:
-        logger.error(f"Failed to install Playwright: {e}")
-        st.error(f"Failed to install Playwright: {e}")
-
-# Initialize Playwright at app startup
-install_playwright()
+        logger.warning(f"Error checking Playwright dependencies: {e}")
+        return False
 
 # Set WindowsProactorEventLoopPolicy for Windows
 if platform.system() == "Windows":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    logger.info("Applied WindowsProactorEventLoopPolicy for asyncio compatibility")
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        logger.info("Applied WindowsProactorEventLoopPolicy for asyncio compatibility")
+    except Exception as e:
+        logger.warning(f"Could not set Windows event loop policy: {e}")
 
 # Title and description
 st.title("Issuu Publication Scraper")
@@ -54,12 +54,19 @@ if st.button("Scrape Issuu", key="scrape_button"):
     if not company_name:
         logger.error("No company name provided in UI")
         st.error("Please enter a company name.")
+    elif not IMPORT_SUCCESS:
+        st.error("Required modules are not available. Please check the logs for details.")
     else:
         logger.info(f"Starting scrape for company: {company_name}")
         with st.spinner("Scraping Issuu... This may take a moment."):
             try:
-                # Call the async scraper function
-                matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
+                # Call the async scraper function with error handling
+                try:
+                    matching_results, non_matching_results = asyncio.run(scrape_issuu_results(company_name))
+                except Exception as e:
+                    logger.error(f"Error during scraping: {e}")
+                    st.error(f"An error occurred during scraping: {str(e)}")
+                    st.stop()
                 
                 if matching_results or non_matching_results:
                     logger.info(f"Found {len(matching_results)} matching and {len(non_matching_results)} non-matching publications")
