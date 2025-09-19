@@ -1,10 +1,11 @@
 import logging
 import json
 import urllib.parse
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Playwright
 import asyncio
 import sys
 import platform
+import os
 from difflib import SequenceMatcher
 
 # Configure logging
@@ -23,27 +24,43 @@ if platform.system() == "Windows":
 def calculate_similarity(a, b):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
+async def init_playwright():
+    playwright = await async_playwright().start()
+    # Use a more compatible browser launch configuration
+    browser = await playwright.chromium.launch(
+        headless=True,
+        args=[
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
+    )
+    return playwright, browser
+
 async def scrape_issuu_results(company_name):
-    # Generate URL by encoding the company name
-    base_url = "https://issuu.com/search?q="
-    encoded_company = urllib.parse.quote(company_name)
-    url = f"{base_url}{encoded_company}"
-    
-    logger.info(f"Generated URL for company '{company_name}': {url}")
+    playwright = None
+    browser = None
     
     try:
-        async with async_playwright() as p:
-            # Launch browser
-            logger.info("Attempting to launch Chromium browser (headless=False)")
-            try:
-                browser = await p.chromium.launch(headless=True)  # Keep headless=False for debugging
-            except Exception as e:
-                logger.error(f"Failed to launch browser: {str(e)}")
-                raise
-            
-            logger.info("Browser launched successfully")
+        # Generate URL by encoding the company name
+        base_url = "https://issuu.com/search?q="
+        encoded_company = urllib.parse.quote(company_name)
+        url = f"{base_url}{encoded_company}"
+    
+        logger.info(f"Generated URL for company '{company_name}': {url}")
+    
+        try:
+            playwright, browser = await init_playwright()
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                viewport={'width': 1920, 'height': 1080},
+                # Disable WebDriver flag to avoid detection
+                bypass_csp=True
             )
             page = await context.new_page()
             logger.info("New browser context and page created")
@@ -141,12 +158,21 @@ async def scrape_issuu_results(company_name):
                 return matching_results, non_matching_results
             
             except Exception as e:
-                logger.error(f"Error during scraping: {str(e)}")
+                logger.error(f"Error during scraping: {e}")
                 return [], []
             
-            finally:
-                logger.info("Closing browser")
-                await browser.close()
+        except Exception as e:
+            logger.error(f"Error during scraping: {e}")
+            return [], []
+        
+        finally:
+            try:
+                if browser:
+                    await browser.close()
+                if playwright:
+                    await playwright.stop()
+            except Exception as e:
+                logger.error(f"Error during cleanup: {e}")
     
     except Exception as e:
         logger.error(f"Failed to initialize Playwright: {str(e)}")
