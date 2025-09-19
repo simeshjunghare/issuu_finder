@@ -19,17 +19,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Ensure Chromium is installed for Playwright (runs once per session) ---
+# --- Ensure Chromium and dependencies are installed for Playwright ---
 @st.cache_resource
 def install_playwright():
     try:
+        # Install Playwright and its dependencies
         subprocess.run(["playwright", "install", "chromium"], check=True)
-        logger.info("Successfully installed Playwright Chromium")
+        subprocess.run(["playwright", "install-deps", "chromium"], check=True)
+        logger.info("Successfully installed Playwright Chromium and dependencies")
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Playwright installation warning: {e}")
+        st.warning("Some Playwright dependencies might be missing. The app may not work correctly.")
     except Exception as e:
-        logger.error(f"Failed to install Playwright Chromium: {e}")
-        st.error(f"Failed to install Playwright Chromium: {e}")
+        logger.error(f"Failed to install Playwright: {e}")
+        st.error(f"Failed to install Playwright: {e}")
 
-# Install Playwright at app startup
+# Initialize Playwright at app startup
 install_playwright()
 
 # Set WindowsProactorEventLoopPolicy for Windows
