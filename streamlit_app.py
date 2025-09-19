@@ -8,13 +8,22 @@ import subprocess
 import sys
 from typing import Tuple, List, Dict, Any
 
-# Configure logging for Streamlit at the module level
+# Configure logging for Streamlit at the module level - must be first
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# Try to import the scraper module
+try:
+    from issue_scraper import scrape_issuu_results
+    IMPORT_SUCCESS = True
+except ImportError as e:
+    logger.error(f"Failed to import scraper: {e}")
+    IMPORT_SUCCESS = False
+    st.error(f"Failed to import required modules: {e}")
 
 def check_playwright_deps():
     """Check if Playwright dependencies are available."""
