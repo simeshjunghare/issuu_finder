@@ -7,6 +7,14 @@ import pandas as pd
 import subprocess
 from issue_scraper import scrape_issuu_results
 
+# Configure logging for Streamlit at the module level
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 # --- Ensure Chromium is installed for Playwright (runs once per session) ---
 @st.cache_resource
 def install_playwright():
@@ -19,14 +27,6 @@ def install_playwright():
 
 # Install Playwright at app startup
 install_playwright()
-
-# Configure logging for Streamlit
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
 
 # Set WindowsProactorEventLoopPolicy for Windows
 if platform.system() == "Windows":
