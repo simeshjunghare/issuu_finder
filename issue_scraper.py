@@ -18,14 +18,16 @@ except ImportError:
     logger.warning("Playwright is not available. Some features may be limited.")
 
 # Try to use requests as a fallback
-if not PLAYWRIGHT_AVAILABLE:
+REQUESTS_AVAILABLE = False
+if not PLAYWRIGHT_AVAILABLE or True:  # Always try to set up requests as fallback
     try:
         import requests
         from bs4 import BeautifulSoup
         REQUESTS_AVAILABLE = True
-    except ImportError:
+    except ImportError as e:
         REQUESTS_AVAILABLE = False
-        logger.warning("Requests and BeautifulSoup are not available. Scraping functionality will be limited.")
+        logger.warning(f"Requests and BeautifulSoup are not available: {e}")
+        logger.warning("Some scraping functionality will be limited.")
 
 # Configure logging
 logging.basicConfig(
