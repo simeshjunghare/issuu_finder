@@ -1,33 +1,11 @@
 import logging
 import json
 import urllib.parse
+from playwright.async_api import async_playwright
 import asyncio
 import sys
 import platform
-import os
 from difflib import SequenceMatcher
-from typing import Tuple, List, Dict, Any
-
-# Try to import Playwright, but don't fail if it's not available
-try:
-    from playwright.async_api import async_playwright, Playwright
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("Playwright is not available. Some features may be limited.")
-
-# Try to use requests as a fallback
-REQUESTS_AVAILABLE = False
-if not PLAYWRIGHT_AVAILABLE or True:  # Always try to set up requests as fallback
-    try:
-        import requests
-        from bs4 import BeautifulSoup
-        REQUESTS_AVAILABLE = True
-    except ImportError as e:
-        REQUESTS_AVAILABLE = False
-        logger.warning(f"Requests and BeautifulSoup are not available: {e}")
-        logger.warning("Some scraping functionality will be limited.")
 
 # Configure logging
 logging.basicConfig(
@@ -45,72 +23,27 @@ if platform.system() == "Windows":
 def calculate_similarity(a, b):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-async def init_playwright():
-    if not PLAYWRIGHT_AVAILABLE:
-        logger.warning("Playwright is not available in this environment")
-        raise RuntimeError("Playwright is not available in this environment")
-        
-    try:
-        playwright = await async_playwright().start()
-        # Use a more compatible browser launch configuration
-        browser = await playwright.chromium.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ],
-            # Add timeout for browser launch
-            timeout=60000
-        )
-        return playwright, browser
-    except Exception as e:
-        logger.warning(f"Failed to initialize Playwright: {e}")
-        # If browser launch fails, try to install the browser
-        try:
-            logger.info("Attempting to install Playwright browser...")
-            import subprocess
-            subprocess.run(["playwright", "install", "chromium"], check=True)
-            # Try launching again after installation
-            playwright = await async_playwright().start()
-            browser = await playwright.chromium.launch(
-                headless=True,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage'
-                ]
-            )
-            return playwright, browser
-        except Exception as install_error:
-            logger.error(f"Failed to install/launch Playwright browser: {install_error}")
-            raise RuntimeError("Could not initialize Playwright browser. Falling back to requests.")
-
-async def scrape_with_playwright(company_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Scrape Issuu using Playwright."""
-    playwright = None
-    browser = None
+async def scrape_issuu_results(company_name):
+    # Generate URL by encoding the company name
+    base_url = "https://issuu.com/search?q="
+    encoded_company = urllib.parse.quote(company_name)
+    url = f"{base_url}{encoded_company}"
+    
+    logger.info(f"Generated URL for company '{company_name}': {url}")
     
     try:
-        # Generate URL by encoding the company name
-        base_url = "https://issuu.com/search?q="
-        encoded_company = urllib.parse.quote(company_name)
-        url = f"{base_url}{encoded_company}"
-    
-        logger.info(f"Generated URL for company '{company_name}': {url}")
-    
-        try:
-            playwright, browser = await init_playwright()
+        async with async_playwright() as p:
+            # Launch browser
+            logger.info("Attempting to launch Chromium browser (headless=False)")
+            try:
+                browser = await p.chromium.launch(headless=False)  # Keep headless=False for debugging
+            except Exception as e:
+                logger.error(f"Failed to launch browser: {str(e)}")
+                raise
+            
+            logger.info("Browser launched successfully")
             context = await browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                viewport={'width': 1920, 'height': 1080},
-                # Disable WebDriver flag to avoid detection
-                bypass_csp=True
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
             logger.info("New browser context and page created")
@@ -208,93 +141,16 @@ async def scrape_with_playwright(company_name: str) -> Tuple[List[Dict[str, Any]
                 return matching_results, non_matching_results
             
             except Exception as e:
-                logger.error(f"Error during scraping: {e}")
+                logger.error(f"Error during scraping: {str(e)}")
                 return [], []
             
-        except Exception as e:
-            logger.error(f"Error during Playwright scraping: {e}")
-            raise
-        
-        finally:
-            try:
-                if browser:
-                    await browser.close()
-                if playwright:
-                    await playwright.stop()
-            except Exception as e:
-                logger.error(f"Error during cleanup: {e}")
+            finally:
+                logger.info("Closing browser")
+                await browser.close()
     
     except Exception as e:
         logger.error(f"Failed to initialize Playwright: {str(e)}")
         return [], []
-
-async def scrape_with_requests(company_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Fallback scraping using requests and BeautifulSoup."""
-    if not REQUESTS_AVAILABLE:
-        logger.error("Requests/BeautifulSoup not available for fallback")
-        return [], []
-        
-    try:
-        base_url = "https://issuu.com/search?q="
-        encoded_company = urllib.parse.quote(company_name)
-        url = f"{base_url}{encoded_company}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        # Parse the response with BeautifulSoup
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # This is a simplified example - you'll need to adjust the selectors
-        results = []
-        for item in soup.select('div[data-testid="publication-card"]'):
-            try:
-                title_elem = item.select_one('h3')
-                link_elem = item.select_one('a')
-                if title_elem and link_elem:
-                    results.append({
-                        'title': title_elem.get_text(strip=True),
-                        'publication_link': f"https://issuu.com{link_elem['href']}"
-                    })
-            except Exception as e:
-                logger.warning(f"Error parsing result: {e}")
-                continue
-                
-        # Since we can't easily determine matches in this simple version,
-        # we'll return all results as matching for simplicity
-        return results, []
-        
-    except Exception as e:
-        logger.error(f"Error during requests-based scraping: {e}")
-        return [], []
-
-async def scrape_issuu_results(company_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Main scraping function that tries different methods."""
-    if not company_name.strip():
-        return [], []
-    
-    # Try requests first as it's more reliable in restricted environments
-    if REQUESTS_AVAILABLE:
-        try:
-            logger.info("Trying requests-based scraping first...")
-            return await scrape_with_requests(company_name)
-        except Exception as e:
-            logger.warning(f"Requests-based scraping failed: {e}")
-    
-    # Fall back to Playwright if available
-    if PLAYWRIGHT_AVAILABLE:
-        try:
-            logger.info("Falling back to Playwright scraping...")
-            return await scrape_with_playwright(company_name)
-        except Exception as e:
-            logger.error(f"Playwright scraping also failed: {e}")
-    
-    logger.error("All scraping methods failed")
-    return [], []
 
 if __name__ == "__main__":
     import sys
