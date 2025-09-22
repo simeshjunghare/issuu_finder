@@ -4,9 +4,11 @@ import asyncio
 import logging
 import platform
 import pandas as pd
-import subprocess   # ✅ Needed for Playwright installation
-from issue_scraper import scrape_issuu_results
-from itertools import islice
+import subprocess
+from issuu_scraper import scrape_issuu_results
+
+# --- Streamlit must start with set_page_config ---
+st.set_page_config(page_title="Issuu Scraper", page_icon="📄", layout="wide")
 
 # --- Ensure Chromium is installed for Playwright ---
 @st.cache_resource
@@ -14,9 +16,9 @@ def install_playwright():
     try:
         subprocess.run(["playwright", "install", "chromium"], check=True)
     except Exception as e:
-        st.error(f"Failed to install Playwright Chromium: {e}")
+        # ⚠️ Don't use st.error here (it breaks the "first command" rule)
+        print(f"❌ Failed to install Playwright Chromium: {e}")
 
-# Call installer when Streamlit starts
 install_playwright()
 
 # Configure logging for Streamlit
@@ -31,9 +33,6 @@ logger = logging.getLogger(__name__)
 if platform.system() == "Windows":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     logger.info("Applied WindowsProactorEventLoopPolicy for asyncio compatibility")
-
-# Streamlit app configuration
-st.set_page_config(page_title="Issuu Scraper", page_icon="📄", layout="wide")
 
 # Title and description
 st.title("Issuu Publication Scraper")
@@ -136,7 +135,11 @@ if uploaded_file is not None:
                         )
 
                         st.subheader("Scraped Results")
-                        st.markdown(results_df[['company', 'title', 'author_link', 'price', 'match_type']].to_html(escape=False, index=False), unsafe_allow_html=True)
+                        st.markdown(
+                            results_df[['company', 'title', 'author_link', 'price', 'match_type']]
+                            .to_html(escape=False, index=False),
+                            unsafe_allow_html=True
+                        )
 
                         # JSON download button
                         json_data = json.dumps(all_results, indent=2, ensure_ascii=False)
