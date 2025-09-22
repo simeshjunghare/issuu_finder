@@ -4,8 +4,20 @@ import asyncio
 import logging
 import platform
 import pandas as pd
-from issue_scraper import scrape_issuu_results
+import subprocess   # ✅ Needed for Playwright installation
+from issuu_scraper import scrape_issuu_results
 from itertools import islice
+
+# --- Ensure Chromium is installed for Playwright ---
+@st.cache_resource
+def install_playwright():
+    try:
+        subprocess.run(["playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        st.error(f"Failed to install Playwright Chromium: {e}")
+
+# Call installer when Streamlit starts
+install_playwright()
 
 # Configure logging for Streamlit
 logging.basicConfig(
@@ -31,7 +43,7 @@ st.markdown("Upload a CSV file containing company names. The scraper will run 5 
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 
 # Helper to process batches of company names with concurrency=5
-async def process_companies(companies, batch_size=4):
+async def process_companies(companies, batch_size=5):
     results = []
 
     for i in range(0, len(companies), batch_size):
