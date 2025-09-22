@@ -5,7 +5,7 @@ import logging
 import platform
 import pandas as pd
 import subprocess   # ✅ Needed for Playwright installation
-from issuu_scraper import scrape_issuu_results
+from issue_scraper import scrape_issuu_results
 from itertools import islice
 
 # --- Ensure Chromium is installed for Playwright ---
