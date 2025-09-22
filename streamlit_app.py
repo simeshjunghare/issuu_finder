@@ -5,7 +5,7 @@ import logging
 import platform
 import pandas as pd
 import subprocess
-from issuu_scraper import scrape_issuu_results
+from issue_scraper import scrape_issuu_results
 
 # --- Streamlit must start with set_page_config ---
 st.set_page_config(page_title="Issuu Scraper", page_icon="📄", layout="wide")
